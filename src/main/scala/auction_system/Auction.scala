@@ -22,9 +22,19 @@ object Auction {
   val createTime = 2 seconds
   val bidTime = 5 seconds
   val deleteTime = 1 second
+
   case class Bid(amount: Int) {
     require(amount > 0)
   }
+
+  case class NewOffer(amount: Int) {
+    require(amount > 0)
+  }
+
+  case object OfferAccepted
+  case object OfferRejected
+  case object WinNotification
+  case object LooseNotification
 }
 
 class Auction extends FSM[AuctionState, AuctionData] {
@@ -33,19 +43,23 @@ class Auction extends FSM[AuctionState, AuctionData] {
 
   when(Created, stateTimeout = createTime) {
     case Event(Bid(amount), NoBids) =>
-      goto(Activated) using Bidding(List(sender), sender, amount)
+      goto(Activated) using new Bidding(List(sender), sender, amount)
     case Event(StateTimeout, NoBids) =>
       goto(Ignored) using NoBids
   }
 
   when(Activated, stateTimeout = bidTime) {
     case Event(Bid(amount), t: Bidding) if amount > t.bestOffer =>
+      sender ! OfferAccepted
       if(!t.sellers.contains(sender))
-        stay() using Bidding(sender :: t.sellers, sender, amount)
-      else
-        stay() using Bidding(t.sellers, sender, amount)
+      stay() using new Bidding(sender :: t.sellers, sender, amount)
+    else
+      stay() using new Bidding(t.sellers, sender, amount)
+    case Event(Bid(amount), t: Bidding) =>
+      sender ! OfferRejected
+      stay() using t
     case Event(StateTimeout, t: Bidding) =>
-      goto(Sold) using Finish(t.sellers, t.winner, t.bestOffer)
+      goto(Sold) using new Finish(t.sellers, t.winner, t.bestOffer)
   }
 
   when(Ignored, stateTimeout = deleteTime) {
@@ -54,7 +68,13 @@ class Auction extends FSM[AuctionState, AuctionData] {
   }
 
   when(Sold, stateTimeout = deleteTime) {
-    case Event(StateTimeout, _) =>
+    case Event(StateTimeout, t: Finish) =>
+      t.winner ! WinNotification
+      for(buyer <- t.sellers)
+        if(buyer != t.winner)
+          buyer ! LooseNotification
       stop
   }
+
+  initialize()
 }
