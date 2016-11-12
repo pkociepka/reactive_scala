@@ -10,11 +10,14 @@ case object Ignored extends AuctionState
 case object Sold extends AuctionState
 
 sealed trait AuctionData
-case object NoBids extends AuctionData
-case class Bidding(buyers: List[ActorRef], winner: ActorRef, bestOffer: Int) extends AuctionData {
+case object NoData extends AuctionData
+case class NoBids(seller: ActorRef) extends AuctionData {
+  require(seller != null)
+}
+case class Bidding(buyers: List[ActorRef], winner: ActorRef, bestOffer: Int, seller: ActorRef) extends AuctionData {
   require(bestOffer > 0)
 }
-case class Finish(sellers: List[ActorRef], winner: ActorRef, bestOffer: Int) extends AuctionData {
+case class Finish(sellers: List[ActorRef], winner: ActorRef, bestOffer: Int, seller: ActorRef) extends AuctionData {
   require(bestOffer > 0)
 }
 
@@ -22,6 +25,10 @@ object Auction {
   val createTime = 2 seconds
   val bidTime = 5 seconds
   val deleteTime = 1 second
+
+  case class SetSeller(seller: ActorRef) {
+    require(seller != null)
+  }
 
   case class Bid(amount: Int) {
     require(amount > 0)
@@ -35,20 +42,26 @@ object Auction {
   case object OfferRejected
   case object WinNotification
   case object LooseNotification
+
+  case class AuctionEnded(auction: ActorRef) {
+    require(auction != null)
+  }
 }
 
 class Auction extends FSM[AuctionState, AuctionData] {
   import Auction._
-  startWith(Created, NoBids)
+  startWith(Created, NoData)
 
   when(Created, stateTimeout = createTime) {
-    case Event(Bid(amount), NoBids) =>
+    case Event(SetSeller(seller), NoData) =>
+      stay using NoBids(seller)
+    case Event(Bid(amount), t: NoBids) =>
       println(s"${self.path.name} started")
       sender ! OfferAccepted
-      goto(Activated) using Bidding(List(sender), sender, amount)
-    case Event(StateTimeout, NoBids) =>
+      goto(Activated) using Bidding(List(sender), sender, amount, t.seller)
+    case Event(StateTimeout, t: NoBids) =>
       println(s"${self.path.name} ignored")
-      goto(Ignored) using NoBids
+      goto(Ignored) using t
   }
 
   when(Activated, stateTimeout = bidTime) {
@@ -58,23 +71,24 @@ class Auction extends FSM[AuctionState, AuctionData] {
           buyer ! NewOffer(amount)
       sender ! OfferAccepted
       if(!t.buyers.contains(sender))
-        stay() using new Bidding(sender :: t.buyers, sender, amount)
+        stay() using new Bidding(sender :: t.buyers, sender, amount, t.seller)
       else
-        stay() using new Bidding(t.buyers, sender, amount)
+        stay() using new Bidding(t.buyers, sender, amount, t.seller)
     case Event(Bid(amount), t: Bidding) =>
       sender ! OfferRejected
       if(!t.buyers.contains(sender))
-        stay() using new Bidding(sender :: t.buyers, sender, amount)
+        stay() using new Bidding(sender :: t.buyers, sender, amount, t.seller)
       else
-        stay() using new Bidding(t.buyers, sender, amount)
+        stay() using new Bidding(t.buyers, sender, amount, t.seller)
     case Event(StateTimeout, t: Bidding) =>
       println(s"${self.path.name} finished at ${t.bestOffer}")
-      goto(Sold) using new Finish(t.buyers, t.winner, t.bestOffer)
+      goto(Sold) using new Finish(t.buyers, t.winner, t.bestOffer, t.seller)
   }
 
   when(Ignored, stateTimeout = deleteTime) {
-    case Event(StateTimeout, NoBids) =>
+    case Event(StateTimeout, t: NoBids) =>
       println(s"${self.path.name} stopped")
+      t.seller ! AuctionEnded(self)
       stop
   }
 
@@ -82,8 +96,9 @@ class Auction extends FSM[AuctionState, AuctionData] {
     case Event(StateTimeout, t: Finish) =>
       t.winner ! WinNotification
       for(buyer <- t.sellers)
-      if(buyer != t.winner)
-      buyer ! LooseNotification
+        if(buyer != t.winner)
+          buyer ! LooseNotification
+      t.seller ! AuctionEnded(self)
       println(s"${self.path.name} stopped")
       stop
   }
