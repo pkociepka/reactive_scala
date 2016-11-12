@@ -1,6 +1,8 @@
-package auction_system
+package auction_system.buyer
 
 import akka.actor.{FSM, ActorRef}
+import scala.concurrent.duration._
+import auction_system.auction.Auction
 
 sealed trait BuyerState
 case object Started extends BuyerState
@@ -29,9 +31,21 @@ class Buyer extends FSM[BuyerState, BuyerData] {
   import Buyer._
   startWith(Started, Uninitialized)
 
-  when(Started) {
+  when(Started, stateTimeout = 10 microseconds) {
     case Event(Initialize(auction, maxOffer), Uninitialized) =>
-      goto(Loosing) using new Active(auction, 0, maxOffer)
+      println(s"${self.path.name} initialized")
+      auction ! Bid(1)
+      stay using Passive(auction, 1, maxOffer)
+    case Event(OfferAccepted, t: Passive) =>
+      println(s"${self.path.name} bids ${t.actualOffer}")
+      goto(Winning) using Active(t.auction, t.actualOffer, t.maxOffer)
+    case Event(OfferRejected, t: Passive) =>
+      println(s"${self.path.name} got ${t.actualOffer} rejected")
+      t.auction ! Bid(t.actualOffer + 1)
+      stay using Passive(t.auction, t.actualOffer + 1, t.maxOffer)
+    case Event(StateTimeout, t: Passive) =>
+      t.auction ! Bid(t.actualOffer)
+      goto(Started) using t
   }
 
   when(Loosing) {
@@ -41,13 +55,16 @@ class Buyer extends FSM[BuyerState, BuyerData] {
     case Event(NewOffer(amount), t: Active) =>
       goto(Passed) using new Passive(t.auction, t.actualOffer, t.maxOffer)
     case Event(LooseNotification, t: Active) =>
+      println(s"${self.path.name} loose")
       stop
   }
 
   when(Bidding) {
     case Event(OfferAccepted, t: Active) =>
+      println(s"${self.path.name} bids ${t.actualOffer}")
       goto(Winning) using t
     case Event(OfferRejected, t: Active) =>
+      println(s"${self.path.name} got ${t.actualOffer} rejected")
       goto(Loosing) using t
   }
 
@@ -58,13 +75,18 @@ class Buyer extends FSM[BuyerState, BuyerData] {
     case Event(NewOffer(amount), t: Active) =>
       goto(Passed) using new Passive(t.auction, t.actualOffer, t.maxOffer)
     case Event(WinNotification, t: Active) =>
+      println(s"${self.path.name} win")
       stop
   }
 
   when(Passed) {
     case Event(WinNotification, t: Passive) =>
+      println(s"${self.path.name} win")
       stop
     case Event(LooseNotification, t: Passive) =>
+      println(s"${self.path.name} loose")
       stop
   }
+
+  initialize()
 }
