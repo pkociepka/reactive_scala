@@ -142,6 +142,9 @@ class Auction extends PersistentFSM[AuctionState, AuctionData, AuctionEvent] {
       case SoldEvent =>
         val data = dataBeforeEvent.asInstanceOf[Bidding]
         Finish(data.buyers, data.winner, data.bestOffer, data.seller)
+
+      case AuctionStoppedEvent =>
+        dataBeforeEvent
     }
   }
 

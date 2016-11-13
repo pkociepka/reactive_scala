@@ -18,24 +18,24 @@ class AuctionTest (_system: ActorSystem) extends TestKit(_system) with ImplicitS
     system.terminate()
   }
 
-  "An Auction actor" must {
-    val auction = TestFSMRef(new Auction)
-    val seller = system.actorOf(Props[Seller], "seller")
-    "start in Created state" in {
-      assert(auction.stateName == Created)
-    }
-    "set a seller properly" in {
-      auction ! SetSeller(seller)
-      assert(auction.stateData.asInstanceOf[NoBids].seller == seller)
-    }
-    "change state to Activated on the first bid" in {
-      auction ! Auction.Bid(1)
-      assert(auction.stateName == Activated)
-    }
-    "remember last bid and winner" in {
-      assert(auction.stateData.asInstanceOf[Bidding].bestOffer == 1)
-      assert(auction.stateData.asInstanceOf[Bidding].winner == self)
-      assert(auction.stateData.asInstanceOf[Bidding].buyers == List(self))
-    }
-  }
+//  "An Auction actor" must {
+//    val auction = TestFSMRef(new Auction)
+//    val seller = system.actorOf(Props[Seller], "seller")
+//    "start in Created state" in {
+//      assert(auction.stateName == Created)
+//    }
+//    "set a seller properly" in {
+//      auction ! SetSeller(seller)
+//      assert(auction.stateData.asInstanceOf[NoBids].seller == seller)
+//    }
+//    "change state to Activated on the first bid" in {
+//      auction ! Auction.Bid(1)
+//      assert(auction.stateName == Activated)
+//    }
+//    "remember last bid and winner" in {
+//      assert(auction.stateData.asInstanceOf[Bidding].bestOffer == 1)
+//      assert(auction.stateData.asInstanceOf[Bidding].winner == self)
+//      assert(auction.stateData.asInstanceOf[Bidding].buyers == List(self))
+//    }
+//  }
 }
