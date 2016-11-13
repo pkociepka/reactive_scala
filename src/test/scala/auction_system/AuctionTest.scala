@@ -2,7 +2,7 @@ package auction_system
 
 import akka.actor.{Props, ActorSystem}
 import akka.testkit.{TestFSMRef, ImplicitSender, TestKit}
-import auction_system.auction.Auction.SetSeller
+import auction_system.auction.Auction.Setup
 import auction_system.auction._
 import auction_system.seller.Seller
 import org.scalatest.{BeforeAndAfterAll, MustMatchers, WordSpecLike}
