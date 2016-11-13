@@ -3,6 +3,7 @@ package auction_system.seller
 import akka.actor.{Props, ActorRef, FSM}
 import auction_system.auction.Auction
 import auction_system.auction.Auction.AuctionEnded
+import auction_system.auction_search.AuctionSearch
 import scala.concurrent.duration._
 
 sealed trait SellerState
@@ -26,7 +27,12 @@ class Seller extends FSM[SellerState, SellerData] {
 
   when(Uninitialized) {
     case Event(Initialize(auctionNames), NoData) =>
+      println("Seller initialized")
       val auctions = for(name <- auctionNames) yield context.system.actorOf(Props[Auction], name)
+      for(auction <- auctions) {
+        context.actorSelection("../auction_search") ! AuctionSearch.NewAuction(auction)
+        auction ! Auction.SetSeller(self)
+      }
       goto(Active) using MyAuctions(auctions)
   }
 
@@ -37,6 +43,8 @@ class Seller extends FSM[SellerState, SellerData] {
         stay using t
       else
         goto(WithoutAuctions) using NoAuctions
+    case Event(NewAuction(auctionName), t: MyAuctions) =>
+      stay using new MyAuctions(context.actorOf(Props[Auction], auctionName) :: t.auctions)
   }
 
   when(WithoutAuctions, stateTimeout = 2 seconds) {
@@ -45,4 +53,6 @@ class Seller extends FSM[SellerState, SellerData] {
     case Event(StateTimeout, NoAuctions) =>
       stop
   }
+
+  initialize()
 }

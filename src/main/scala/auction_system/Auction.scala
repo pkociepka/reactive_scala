@@ -89,6 +89,7 @@ class Auction extends FSM[AuctionState, AuctionData] {
     case Event(StateTimeout, t: NoBids) =>
       println(s"${self.path.name} stopped")
       t.seller ! AuctionEnded(self)
+      context.actorSelection("../auction_search") ! AuctionEnded(self)
       stop
   }
 
@@ -99,6 +100,7 @@ class Auction extends FSM[AuctionState, AuctionData] {
         if(buyer != t.winner)
           buyer ! LooseNotification
       t.seller ! AuctionEnded(self)
+      context.actorSelection("../auction_search") ! AuctionEnded(self)
       println(s"${self.path.name} stopped")
       stop
   }
