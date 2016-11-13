@@ -1,13 +1,24 @@
 package auction_system.auction
 
-import akka.actor.{ActorRef, FSM}
+import akka.actor.{ActorRef}
+import akka.persistence.fsm.PersistentFSM
+import akka.persistence.fsm.PersistentFSM.FSMState
 import scala.concurrent.duration._
+import scala.reflect._
 
-sealed trait AuctionState
-case object Created extends AuctionState
-case object Activated extends AuctionState
-case object Ignored extends AuctionState
-case object Sold extends AuctionState
+sealed trait AuctionState extends FSMState
+case object Created extends AuctionState {
+  override def identifier: String = "created"
+}
+case object Activated extends AuctionState {
+  override def identifier: String = "activated"
+}
+case object Ignored extends AuctionState {
+  override def identifier: String = "ignored"
+}
+case object Sold extends AuctionState {
+  override def identifier: String = "sold"
+}
 
 sealed trait AuctionData
 case object NoData extends AuctionData
@@ -20,6 +31,13 @@ case class Bidding(buyers: List[ActorRef], winner: ActorRef, bestOffer: Int, sel
 case class Finish(sellers: List[ActorRef], winner: ActorRef, bestOffer: Int, seller: ActorRef) extends AuctionData {
   require(bestOffer > 0)
 }
+
+sealed trait AuctionEvent
+case class SellerAddedEvent(seller: ActorRef) extends AuctionEvent
+case class BidEvent(bid: Int, buyer: ActorRef) extends AuctionEvent
+case object AuctionIgnoredEvent extends AuctionEvent
+case object SoldEvent extends AuctionEvent
+case object AuctionStoppedEvent extends AuctionEvent
 
 object Auction {
   val createTime = 2 seconds
@@ -48,41 +66,40 @@ object Auction {
   }
 }
 
-class Auction extends FSM[AuctionState, AuctionData] {
+class Auction extends PersistentFSM[AuctionState, AuctionData, AuctionEvent] {
+
+  override def persistenceId: String = "persistent_auction"
+  override def domainEventClassTag: ClassTag[AuctionEvent] = classTag[AuctionEvent]
+
   import Auction._
+
   startWith(Created, NoData)
 
   when(Created, stateTimeout = createTime) {
     case Event(SetSeller(seller), NoData) =>
-      stay using NoBids(seller)
+      stay applying SellerAddedEvent(seller)
     case Event(Bid(amount), t: NoBids) =>
       println(s"${self.path.name} started")
       sender ! OfferAccepted
-      goto(Activated) using Bidding(List(sender), sender, amount, t.seller)
+      goto(Activated) applying BidEvent(amount, sender)
     case Event(StateTimeout, t: NoBids) =>
       println(s"${self.path.name} ignored")
-      goto(Ignored) using t
+      goto(Ignored) applying AuctionIgnoredEvent
   }
 
   when(Activated, stateTimeout = bidTime) {
     case Event(Bid(amount), t: Bidding) if amount > t.bestOffer =>
-      for(buyer <- t.buyers)
-        if(buyer != sender)
+      for (buyer <- t.buyers)
+        if (buyer != sender)
           buyer ! NewOffer(amount)
       sender ! OfferAccepted
-      if(!t.buyers.contains(sender))
-        stay() using new Bidding(sender :: t.buyers, sender, amount, t.seller)
-      else
-        stay() using new Bidding(t.buyers, sender, amount, t.seller)
+      stay() applying BidEvent(amount, sender)
     case Event(Bid(amount), t: Bidding) =>
       sender ! OfferRejected
-      if(!t.buyers.contains(sender))
-        stay() using new Bidding(sender :: t.buyers, sender, amount, t.seller)
-      else
-        stay() using new Bidding(t.buyers, sender, amount, t.seller)
+      stay() applying BidEvent(amount, sender)
     case Event(StateTimeout, t: Bidding) =>
       println(s"${self.path.name} finished at ${t.bestOffer}")
-      goto(Sold) using new Finish(t.buyers, t.winner, t.bestOffer, t.seller)
+      goto(Sold) applying SoldEvent
   }
 
   when(Ignored, stateTimeout = deleteTime) {
@@ -90,20 +107,44 @@ class Auction extends FSM[AuctionState, AuctionData] {
       println(s"${self.path.name} stopped")
       t.seller ! AuctionEnded(self)
       context.actorSelection("../auction_search") ! AuctionEnded(self)
-      stop
+      stop applying AuctionStoppedEvent
   }
 
   when(Sold, stateTimeout = deleteTime) {
     case Event(StateTimeout, t: Finish) =>
       t.winner ! WinNotification
-      for(buyer <- t.sellers)
-        if(buyer != t.winner)
+      for (buyer <- t.sellers)
+        if (buyer != t.winner)
           buyer ! LooseNotification
       t.seller ! AuctionEnded(self)
       context.actorSelection("../auction_search") ! AuctionEnded(self)
       println(s"${self.path.name} stopped")
-      stop
+      stop applying AuctionStoppedEvent
+  }
+
+  override def applyEvent(event: AuctionEvent, dataBeforeEvent: AuctionData): AuctionData = {
+    event match {
+      case SellerAddedEvent(seller) => NoBids(seller)
+
+      case BidEvent(offer, buyer) =>
+        dataBeforeEvent match {
+          case data: NoBids => Bidding(List(buyer), buyer, offer, data.seller)
+          case data: Bidding =>
+            if (data.buyers.contains(buyer))
+              Bidding(data.buyers, sender, offer, data.seller)
+            else
+              Bidding(sender :: data.buyers, sender, offer, data.seller)
+        }
+
+      case AuctionIgnoredEvent =>
+        dataBeforeEvent
+
+      case SoldEvent =>
+        val data = dataBeforeEvent.asInstanceOf[Bidding]
+        Finish(data.buyers, data.winner, data.bestOffer, data.seller)
+    }
   }
 
   initialize()
 }
+

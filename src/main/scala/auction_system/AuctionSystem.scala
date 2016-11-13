@@ -1,7 +1,6 @@
 package auction_system
 
 import akka.actor.{Props, ActorSystem}
-import auction_system.auction.Auction
 import auction_system.auction_search.AuctionSearch
 import auction_system.buyer.Buyer
 import auction_system.seller.Seller
