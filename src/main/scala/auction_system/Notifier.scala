@@ -1,6 +1,10 @@
 package auction_system.notifier
 
-import akka.actor.{FSM, ActorRef}
+import java.net.{UnknownHostException, PortUnreachableException, ConnectException}
+
+import akka.actor.Actor.Receive
+import akka.actor.{Props, Actor, FSM, ActorRef}
+import akka.event.LoggingReceive
 import auction_system.publisher.Publisher.Publish
 
 sealed trait NotifierState
@@ -27,9 +31,33 @@ class Notifier extends FSM[NotifierState, NotifierData]{
 
   when(ActiveNotifier) {
     case Event(Notify(auctionName, buyer, offer), t: WithPublisher) =>
-      t.publisher ! Publish(auctionName, buyer, offer)
+//      t.publisher ! Publish(auctionName, buyer, offer)
+      context.system.actorOf(Props[NotifierRequest]) ! NotifierRequest.Request(auctionName, buyer, offer, t.publisher)
       stay using t
   }
 
   initialize()
+}
+
+object NotifierRequest {
+  case class Request(auctionName: String, buyer: ActorRef, offer: Int, publisher: ActorRef)
+}
+
+class NotifierRequest extends Actor {
+  import NotifierRequest._
+  import akka.actor.OneForOneStrategy
+  import akka.actor.SupervisorStrategy._
+  import scala.concurrent.duration._
+
+  override val supervisorStrategy =
+    OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+      case _: ConnectException => Resume
+      case _: PortUnreachableException => Stop
+      case _: UnknownHostException => Escalate
+    }
+
+  override def receive = LoggingReceive {
+    case Request(auctionName, buyer, offer, publisher) =>
+      publisher ! Publish(auctionName, buyer, offer)
+  }
 }
