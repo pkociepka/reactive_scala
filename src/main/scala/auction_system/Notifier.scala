@@ -7,6 +7,8 @@ import akka.actor.{Props, Actor, FSM, ActorRef}
 import akka.event.LoggingReceive
 import auction_system.publisher.Publisher.Publish
 
+import scala.util.Random
+
 sealed trait NotifierState
 case object UninitializedNotifier extends NotifierState
 case object ActiveNotifier extends NotifierState
@@ -49,6 +51,8 @@ class NotifierRequest extends Actor {
   import akka.actor.SupervisorStrategy._
   import scala.concurrent.duration._
 
+  val rnd = Random
+
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
       case _: ConnectException => Resume
@@ -58,6 +62,8 @@ class NotifierRequest extends Actor {
 
   override def receive = LoggingReceive {
     case Request(auctionName, buyer, offer, publisher) =>
+      if(rnd.nextFloat() < 0.1)
+        throw new PortUnreachableException
       publisher ! Publish(auctionName, buyer, offer)
   }
 }
