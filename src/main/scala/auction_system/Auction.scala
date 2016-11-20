@@ -3,6 +3,7 @@ package auction_system.auction
 import akka.actor.ActorRef
 import akka.persistence.fsm.PersistentFSM
 import akka.persistence.fsm.PersistentFSM.FSMState
+import auction_system.master_search.MasterSearch
 import auction_system.notifier.Notifier
 import scala.concurrent.duration._
 import scala.reflect._
@@ -120,7 +121,7 @@ class Auction extends PersistentFSM[AuctionState, AuctionData, AuctionEvent] {
         if (buyer != t.winner)
           buyer ! LooseNotification
       t.seller ! AuctionEnded(self)
-      context.actorSelection("../auction_search") ! AuctionEnded(self)
+      context.actorSelection("../master_search") ! MasterSearch.Ended(self)
       println(s"${self.path.name} stopped")
       stop applying AuctionStoppedEvent
   }

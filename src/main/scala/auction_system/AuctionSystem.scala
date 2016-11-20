@@ -3,6 +3,7 @@ package auction_system
 import akka.actor.{Props, ActorSystem}
 import auction_system.auction_search.AuctionSearch
 import auction_system.buyer.Buyer
+import auction_system.master_search.MasterSearch
 import auction_system.notifier.Notifier
 import auction_system.notifier.Notifier.InitNotifier
 import auction_system.publisher.Publisher
@@ -15,9 +16,9 @@ import scala.concurrent.duration.Duration
 object AuctionSystem extends App {
   val config = ConfigFactory.load()
   val auctionSystem = ActorSystem("Auction", config.getConfig("auctionapp").withFallback(config))
-  val publisherSystem = ActorSystem("Auction", config.getConfig("publisherapp").withFallback(config))
+  val publisherSystem = ActorSystem("Publisher", config.getConfig("publisherapp").withFallback(config))
   val seller = auctionSystem.actorOf(Props[Seller], "seller")
-  val auctionSearch = auctionSystem.actorOf(Props[AuctionSearch], "auction_search")
+  val masterSearch = auctionSystem.actorOf(Props[MasterSearch], "master_search")
   val buyer1 = auctionSystem.actorOf(Props[Buyer], "buyer1")
   val buyer2 = auctionSystem.actorOf(Props[Buyer], "buyer2")
   val buyer3 = auctionSystem.actorOf(Props[Buyer], "buyer3")

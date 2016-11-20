@@ -2,6 +2,7 @@ package auction_system.buyer
 
 import akka.actor.{FSM, ActorRef}
 import auction_system.auction_search.AuctionSearch
+import auction_system.master_search.MasterSearch
 import scala.concurrent.duration._
 import auction_system.auction.Auction
 
@@ -39,7 +40,7 @@ class Buyer extends FSM[BuyerState, BuyerData] {
   when(Started) {
     case Event(Initialize(auctionName, maxOffer), Uninitialized) =>
       println(s"${self.path.name} initialized")
-      context.actorSelection("../auction_search") ! AuctionSearch.Find(auctionName)
+      context.actorSelection("../master_search") ! MasterSearch.Search(auctionName)
       goto(FindAuction) using Searching(auctionName, maxOffer)
   }
   when(FindAuction, stateTimeout = 1 second) {
@@ -48,7 +49,7 @@ class Buyer extends FSM[BuyerState, BuyerData] {
       auction ! Bid(1)
       goto(Bidding) using Active(auction, 1, t.maxOffer)
     case Event(StateTimeout, t: Searching) =>
-      context.actorSelection("../auction_search") ! AuctionSearch.Find(t.auctionName)
+      context.actorSelection("../master_search") ! MasterSearch.Search(t.auctionName)
       stay using t
   }
 

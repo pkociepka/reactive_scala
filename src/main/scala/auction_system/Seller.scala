@@ -4,6 +4,7 @@ import akka.actor.{Props, ActorRef, FSM}
 import auction_system.auction.Auction
 import auction_system.auction.Auction.AuctionEnded
 import auction_system.auction_search.AuctionSearch
+import auction_system.master_search.MasterSearch
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -31,7 +32,7 @@ class Seller extends FSM[SellerState, SellerData] {
       println("Seller initialized")
       val auctions = for(name <- auctionNames) yield context.system.actorOf(Props[Auction], name)
       for(auction <- auctions) {
-        context.actorSelection("../auction_search") ! AuctionSearch.NewAuction(auction)
+        context.actorSelection("../master_search") ! MasterSearch.Register(auction)
         auction ! Auction.Setup(self, notifier)
       }
       goto(Active) using MyAuctions(auctions)
