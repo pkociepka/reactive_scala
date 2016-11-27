@@ -30,8 +30,8 @@ class AuctionSearch extends FSM[AuctionSearchState, AuctionSearchData] {
       else
         goto(WithoutAuctions) using NoAuctions
     case Event(NewAuction(auction), t: MyAuctions) =>
-      println(s"New auction ${auction.path.name} registered")
-      stay using new MyAuctions(auction :: t.auctions)
+//      println(s"New auction ${auction.path.name} registered")
+      stay using MyAuctions(auction :: t.auctions)
     case Event(Find(name), t: MyAuctions) =>
       sender ! SearchResult(t.auctions.filter(elem => elem.path.name == name))
       stay using t
@@ -39,7 +39,7 @@ class AuctionSearch extends FSM[AuctionSearchState, AuctionSearchData] {
 
   when(WithoutAuctions, stateTimeout = 2 seconds) {
     case Event(NewAuction(auction), NoAuctions) =>
-      println(s"New auction ${auction.path.name} registered")
+//      println(s"New auction ${auction.path.name} registered")
       goto(Active) using MyAuctions(List(auction))
     case Event(StateTimeout, NoAuctions) =>
       stop

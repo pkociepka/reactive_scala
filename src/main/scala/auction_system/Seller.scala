@@ -29,7 +29,7 @@ class Seller extends FSM[SellerState, SellerData] {
 
   when(Uninitialized) {
     case Event(Initialize(auctionNames, notifier: ActorRef), NoData) =>
-      println("Seller initialized")
+//      println("Seller initialized")
       val auctions = for(name <- auctionNames) yield context.system.actorOf(Props[Auction], name)
       for(auction <- auctions) {
         context.actorSelection("../master_search") ! MasterSearch.Register(auction)

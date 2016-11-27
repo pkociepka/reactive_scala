@@ -1,9 +1,11 @@
 package auction_system
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.{ActorSystem, Props}
+import akka.routing.RoundRobinRoutingLogic
 import auction_system.auction_search.AuctionSearch
 import auction_system.buyer.Buyer
 import auction_system.master_search.MasterSearch
+import auction_system.master_search.MasterSearch.InitSearch
 import auction_system.notifier.Notifier
 import auction_system.notifier.Notifier.InitNotifier
 import auction_system.publisher.Publisher
@@ -26,6 +28,8 @@ object AuctionSystem extends App {
 
   val notifier = auctionSystem.actorOf(Props[Notifier], "notifier")
   val publisher = publisherSystem.actorOf(Props[Publisher], "publisher")
+
+  masterSearch ! InitSearch(5, RoundRobinRoutingLogic())
 
   notifier ! InitNotifier(publisher)
 

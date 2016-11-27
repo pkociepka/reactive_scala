@@ -62,7 +62,7 @@ class NotifierRequest extends Actor {
 
   override def receive = LoggingReceive {
     case Request(auctionName, buyer, offer, publisher) =>
-      if(rnd.nextFloat() < 0.1)
+      if(rnd.nextFloat() < 0.5)
         throw new PortUnreachableException
       publisher ! Publish(auctionName, buyer, offer)
   }

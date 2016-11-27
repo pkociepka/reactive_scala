@@ -122,7 +122,7 @@ class Auction extends PersistentFSM[AuctionState, AuctionData, AuctionEvent] {
           buyer ! LooseNotification
       t.seller ! AuctionEnded(self)
       context.actorSelection("../master_search") ! MasterSearch.Ended(self)
-      println(s"${self.path.name} stopped")
+      println(s"${self.path.name} stopped, ${t.winner.path.name} wins at ${t.bestOffer}")
       stop applying AuctionStoppedEvent
   }
 
